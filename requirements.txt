@@ -1,0 +1,54 @@
+# Web framework
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+python-multipart==0.0.9
+
+# Pydantic & settings
+pydantic==2.7.4
+pydantic-settings==2.3.3
+
+# Neo4j graph database
+neo4j==5.21.0
+
+# Qdrant vector store
+qdrant-client==1.9.2
+
+# Sentence embeddings (local, no API key required)
+sentence-transformers==3.0.1
+torch==2.3.1
+
+# LLM clients
+openai==1.35.7
+
+# Scheduling (decay engine)
+apscheduler==3.10.4
+
+# Redis (session cache, query cache)
+redis==5.0.6
+hiredis==2.3.2
+
+# Supabase (optional telemetry / audit log)
+supabase==2.5.3
+
+# Async HTTP
+httpx==0.27.0
+aiohttp==3.9.5
+
+# Logging
+loguru==0.7.2
+
+# Utilities
+python-dotenv==1.0.1
+tenacity==8.4.1
+ulid-py==1.1.0
+
+# Testing
+pytest==8.2.2
+pytest-asyncio==0.23.7
+pytest-mock==3.14.0
+respx==0.21.1
+
+# Dev / code quality
+black==24.4.2
+ruff==0.5.0
+mypy==1.10.0
