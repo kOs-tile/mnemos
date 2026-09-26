@@ -11,8 +11,8 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Hermes Compatible](https://img.shields.io/badge/Hermes-Compatible-8A2BE2.svg)](https://github.com/kOs-tile/hermes)
 
-> **Persistent semantic memory graph service for multi-agent AI systems.**
-> Drop-in memory layer for the Hermes/Kavi Claw agent framework.
+> **Provenance-aware persistent memory research for multi-agent AI systems.**
+> Historical context stays advisory, freshness-bounded, and separate from runtime authority.
 
 ---
 
@@ -34,6 +34,21 @@ Real memory has structure:
 MNEMOS gives your agents a **working memory** that actually behaves like one: it forgets low-salience facts, strengthens frequently accessed paths, detects contradictions, and organizes knowledge into typed memory structures.
 
 ---
+
+## Provenance and freshness
+
+MNEMOS records how a memory entered the system. Episodic execution records are
+tagged `agent_trace`; semantic/procedural facts extracted by the LLM are tagged
+`llm_derived`. The model also supports `external_evidence`, `user_asserted`,
+and `unknown` provenance.
+
+Memories may carry an optional `valid_until` boundary. Expired memories are
+excluded from default retrieval even if they remain structurally ACTIVE in the
+memory graph. A caller must explicitly request stale evidence to include it.
+
+Queries may also provide a provenance allowlist. The same filter is applied to
+direct vector matches and graph-expanded neighbors so graph traversal cannot
+silently reintroduce disallowed memory.
 
 ## Authority boundary
 
@@ -421,3 +436,8 @@ MIT License — Copyright (c) 2026 Onur Kavi
 ---
 
 *MNEMOS — from the Greek μνήμη (mneme), meaning memory. In Greek mythology, Mnemosyne was the goddess of memory and mother of the nine Muses.*
+
+
+## Validation gate
+
+MNEMOS's primary safety metric is **silent-trust rate**: stale or disallowed memory must not enter default prompt context without explicit opt-in. The benchmark and exit gate are defined in [`docs/VALIDATION.md`](docs/VALIDATION.md).
