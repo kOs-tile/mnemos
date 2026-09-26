@@ -1,5 +1,8 @@
 # MNEMOS
 
+> **Status — Research-active.** MNEMOS is being retained as a memory-systems experiment and KAVI subsystem candidate. Temporal-decay semantics are under active validation; do not treat the current implementation as production memory infrastructure without further workload testing.
+
+
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg)](https://fastapi.tiangolo.com)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5.x-008CC1.svg)](https://neo4j.com)
@@ -145,7 +148,7 @@ MNEMOS models three distinct memory types, mirroring cognitive science:
 ### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/onurkavi/mnemos.git
+git clone https://github.com/kOs-tile/mnemos.git
 cd mnemos
 cp .env.example .env
 # Edit .env with your API keys
