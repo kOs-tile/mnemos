@@ -9,7 +9,7 @@
 [![Qdrant](https://img.shields.io/badge/Qdrant-1.9-red.svg)](https://qdrant.tech)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Hermes Compatible](https://img.shields.io/badge/Hermes-Compatible-8A2BE2.svg)](https://github.com/onurkavi/hermes)
+[![Hermes Compatible](https://img.shields.io/badge/Hermes-Compatible-8A2BE2.svg)](https://github.com/kOs-tile/hermes)
 
 > **Persistent semantic memory graph service for multi-agent AI systems.**
 > Drop-in memory layer for the Hermes/Kavi Claw agent framework.
