@@ -26,9 +26,11 @@ from mnemos.config import Settings, get_settings
 from mnemos.graph.neo4j_client import Neo4jClient
 from mnemos.models import (
     MemoryNode,
+    MemoryStatus,
     MemoryType,
     QueryRequest,
     QueryResponse,
+    RetrievalAdmissionReport,
 )
 
 
@@ -36,15 +38,28 @@ def _provenance_value(value: Any) -> str:
     return value.value if hasattr(value, "value") else str(value)
 
 
-def _memory_allowed(node: MemoryNode, request: QueryRequest) -> bool:
-    """Apply evidence constraints after storage retrieval and graph expansion."""
+def _memory_rejection_reason(
+    node: MemoryNode,
+    request: QueryRequest,
+) -> str | None:
+    """Return the deterministic admission failure reason, or None when admitted."""
+    status = node.status.value if hasattr(node.status, "value") else str(node.status)
+    if status != MemoryStatus.ACTIVE.value:
+        return "inactive_status"
     if not request.include_stale_evidence and node.is_evidence_stale():
-        return False
+        return "stale_evidence"
     if request.allowed_provenance:
         allowed = {_provenance_value(item) for item in request.allowed_provenance}
         if _provenance_value(node.provenance) not in allowed:
-            return False
-    return True
+            return "provenance_not_allowed"
+    if request.require_source_trace and not node.source_trace_id:
+        return "missing_source_trace"
+    return None
+
+
+def _memory_allowed(node: MemoryNode, request: QueryRequest) -> bool:
+    """Apply the same auditable admission policy to direct and graph retrieval."""
+    return _memory_rejection_reason(node, request) is None
 
 
 @dataclass
@@ -126,16 +141,33 @@ class QueryPlanner:
             r["node_id"]: r["score"] for r in vector_results
         }
 
-        scored_nodes: list[ScoredNode] = [
-            ScoredNode(
-                node=n,
-                vector_score=vector_score_map.get(n.id, 0.0),
-                graph_distance=0,
-            )
-            for n in seed_nodes
-            if n.salience >= request.min_salience
-            and _memory_allowed(n, request)
-        ]
+        rejected_by_reason: dict[str, int] = {}
+        rejected_memory_ids: dict[str, list[str]] = {}
+        evaluated_ids: set[str] = set()
+
+        def admit(node: MemoryNode) -> bool:
+            if node.id in evaluated_ids:
+                return _memory_allowed(node, request)
+            evaluated_ids.add(node.id)
+            reason = _memory_rejection_reason(node, request)
+            if reason is None:
+                return True
+            rejected_by_reason[reason] = rejected_by_reason.get(reason, 0) + 1
+            rejected_memory_ids.setdefault(reason, []).append(node.id)
+            return False
+
+        scored_nodes: list[ScoredNode] = []
+        for n in seed_nodes:
+            if n.salience < request.min_salience:
+                continue
+            if admit(n):
+                scored_nodes.append(
+                    ScoredNode(
+                        node=n,
+                        vector_score=vector_score_map.get(n.id, 0.0),
+                        graph_distance=0,
+                    )
+                )
 
         # ── Step 4: Graph traversal expansion ────────────────────────────────
         if request.include_graph_hops > 0 and seed_node_ids:
@@ -156,7 +188,7 @@ class QueryPlanner:
                     n.id not in existing_ids
                     and n.salience >= request.min_salience
                     and type_allowed
-                    and _memory_allowed(n, request)
+                    and admit(n)
                 ):
                     scored_nodes.append(
                         ScoredNode(node=n, vector_score=0.3, graph_distance=1)
@@ -175,16 +207,30 @@ class QueryPlanner:
         graph_context = self._build_graph_context(scored_nodes[: request.top_k])
 
         end_ms = int(time.time() * 1000)
+        policy_leak_count = sum(
+            1 for node in final_nodes
+            if _memory_rejection_reason(node, request) is not None
+        )
+        admission_report = RetrievalAdmissionReport(
+            evaluated_candidates=len(evaluated_ids),
+            eligible_candidates=len(scored_nodes),
+            returned_memories=len(final_nodes),
+            rejected_by_reason=rejected_by_reason,
+            rejected_memory_ids=rejected_memory_ids,
+            policy_leak_count=policy_leak_count,
+        )
         response = QueryResponse(
             query=request.query,
             memories=final_nodes,
             graph_context=graph_context,
             retrieval_ms=end_ms - start_ms,
+            admission_report=admission_report,
         )
         response.formatted_context = response.format_for_prompt()
 
         logger.info(
-            f"QueryPlanner: retrieved {len(final_nodes)} nodes in {end_ms - start_ms}ms"
+            f"QueryPlanner: retrieved {len(final_nodes)} nodes in {end_ms - start_ms}ms "
+            f"(rejected={sum(rejected_by_reason.values())}, policy_leaks={policy_leak_count})"
         )
         return response
 
