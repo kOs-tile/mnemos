@@ -61,8 +61,11 @@ class Settings(BaseSettings):
         le=1.0,
     )
     decay_stability_base: float = Field(
-        default=1.0,
-        description="Base stability factor S in R(t)=e^(-t/S). Higher = slower forgetting.",
+        default=24.0,
+        description=(
+            "Base stability factor S in hours for R(t)=e^(-t/S). "
+            "Higher values produce slower forgetting."
+        ),
         gt=0.0,
     )
     decay_resurrection_boost: float = Field(
