@@ -32,6 +32,21 @@ from mnemos.models import (
 )
 
 
+def _provenance_value(value: Any) -> str:
+    return value.value if hasattr(value, "value") else str(value)
+
+
+def _memory_allowed(node: MemoryNode, request: QueryRequest) -> bool:
+    """Apply evidence constraints after storage retrieval and graph expansion."""
+    if not request.include_stale_evidence and node.is_evidence_stale():
+        return False
+    if request.allowed_provenance:
+        allowed = {_provenance_value(item) for item in request.allowed_provenance}
+        if _provenance_value(node.provenance) not in allowed:
+            return False
+    return True
+
+
 @dataclass
 class ScoredNode:
     """A MemoryNode with an associated relevance score."""
@@ -119,6 +134,7 @@ class QueryPlanner:
             )
             for n in seed_nodes
             if n.salience >= request.min_salience
+            and _memory_allowed(n, request)
         ]
 
         # ── Step 4: Graph traversal expansion ────────────────────────────────
@@ -140,6 +156,7 @@ class QueryPlanner:
                     n.id not in existing_ids
                     and n.salience >= request.min_salience
                     and type_allowed
+                    and _memory_allowed(n, request)
                 ):
                     scored_nodes.append(
                         ScoredNode(node=n, vector_score=0.3, graph_distance=1)
@@ -256,6 +273,8 @@ class QueryPlanner:
                     "composite_score": round(sn.composite_score, 4),
                     "vector_score": round(sn.vector_score, 4),
                     "salience": round(sn.node.salience, 4),
+                    "provenance": _provenance_value(sn.node.provenance),
+                    "stale": sn.node.is_evidence_stale(),
                     "graph_distance": sn.graph_distance,
                 }
             )
