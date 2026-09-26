@@ -27,7 +27,13 @@ from mnemos.graph.schema import (
     NodeProp,
     RelLabel,
 )
-from mnemos.models import MemoryEdge, MemoryNode, MemoryStatus, MemoryType
+from mnemos.models import (
+    MemoryEdge,
+    MemoryNode,
+    MemoryProvenance,
+    MemoryStatus,
+    MemoryType,
+)
 
 
 def _serialize_datetime(dt: datetime) -> str:
@@ -58,6 +64,14 @@ def _node_from_record(record: dict[str, Any]) -> MemoryNode:
         stability=float(record.get(NodeProp.STABILITY, 1.0)),
         status=MemoryStatus(record.get(NodeProp.STATUS, "active")),
         source_trace_id=record.get(NodeProp.SOURCE_TRACE_ID),
+        provenance=MemoryProvenance(
+            record.get(NodeProp.PROVENANCE, MemoryProvenance.UNKNOWN.value)
+        ),
+        valid_until=(
+            _parse_datetime(record[NodeProp.VALID_UNTIL])
+            if record.get(NodeProp.VALID_UNTIL)
+            else None
+        ),
         created_at=_parse_datetime(record[NodeProp.CREATED_AT]),
         last_accessed=_parse_datetime(record[NodeProp.LAST_ACCESSED]),
         metadata=json.loads(record.get(NodeProp.METADATA, "{}") or "{}"),
@@ -166,6 +180,8 @@ class Neo4jClient:
             f"  m.stability = $stability, "
             f"  m.status = $status, "
             f"  m.source_trace_id = $source_trace_id, "
+            f"  m.provenance = $provenance, "
+            f"  m.valid_until = $valid_until, "
             f"  m.created_at = $created_at, "
             f"  m.last_accessed = $last_accessed, "
             f"  m.metadata = $metadata "
@@ -189,6 +205,11 @@ class Neo4jClient:
                 stability=node.stability,
                 status=node.status,
                 source_trace_id=node.source_trace_id,
+                provenance=node.provenance,
+                valid_until=(
+                    _serialize_datetime(node.valid_until)
+                    if node.valid_until else None
+                ),
                 created_at=_serialize_datetime(node.created_at),
                 last_accessed=_serialize_datetime(node.last_accessed),
                 metadata=json.dumps(node.metadata),
@@ -246,6 +267,11 @@ class Neo4jClient:
                 "stability": n.stability,
                 "status": n.status,
                 "source_trace_id": n.source_trace_id,
+                "provenance": n.provenance,
+                "valid_until": (
+                    _serialize_datetime(n.valid_until)
+                    if n.valid_until else None
+                ),
                 "created_at": _serialize_datetime(n.created_at),
                 "last_accessed": _serialize_datetime(n.last_accessed),
                 "metadata": json.dumps(n.metadata),
