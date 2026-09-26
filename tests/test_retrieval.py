@@ -189,6 +189,19 @@ class TestQueryPlannerBasic:
         mock_embedder.encode.assert_called_once_with("AWS pricing", convert_to_list=True)
 
 
+    @pytest.mark.asyncio
+    async def test_admission_fingerprint_is_deterministic(self, query_planner):
+        request = QueryRequest(query="AWS pricing", agent_id="test-agent")
+        first = await query_planner.query(request)
+        second = await query_planner.query(request)
+
+        assert len(first.admission_report.admission_fingerprint) == 64
+        assert (
+            first.admission_report.admission_fingerprint
+            == second.admission_report.admission_fingerprint
+        )
+
+
 # ─── Qdrant Integration ───────────────────────────────────────────────────────
 
 class TestQueryPlannerQdrant:
