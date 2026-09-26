@@ -35,6 +35,12 @@ MNEMOS gives your agents a **working memory** that actually behaves like one: it
 
 ---
 
+## Authority boundary
+
+MNEMOS returns advisory historical context, not execution authority. Prompt-formatted retrieval explicitly warns that memories can be stale, incorrect, or superseded and must not override current task/policy. Where available, retrieved items include the originating trace identifier for provenance.
+
+In a KAVI stack, KCC remains the authority plane; a remembered instruction cannot grant a capability that is absent from the current execution capsule.
+
 ## Architecture
 
 ```
