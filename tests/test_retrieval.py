@@ -155,6 +155,17 @@ class TestQueryPlannerBasic:
         result = await query_planner.query(request)
         assert result.retrieval_ms >= 0
 
+
+    @pytest.mark.asyncio
+    async def test_query_exposes_zero_policy_leaks(self, query_planner):
+        request = QueryRequest(query="AWS pricing", agent_id="test-agent")
+        result = await query_planner.query(request)
+
+        assert result.admission_report.evaluated_candidates >= len(result.memories)
+        assert result.admission_report.returned_memories == len(result.memories)
+        assert result.admission_report.policy_leak_count == 0
+        assert "Admission audit:" in result.formatted_context
+
     @pytest.mark.asyncio
     async def test_query_includes_graph_context(self, query_planner):
         request = QueryRequest(
@@ -387,6 +398,57 @@ class TestQueryPlannerGraphTraversal:
         # n001 from vector search + n002, n003 from graph
         assert "n001" in result_ids
         assert "n002" in result_ids or "n003" in result_ids
+
+
+    @pytest.mark.asyncio
+    async def test_graph_superseded_memory_is_rejected_and_audited(
+        self, mock_neo4j, mock_qdrant, mock_embedder, settings, mock_nodes
+    ):
+        from mnemos.models import MemoryStatus
+
+        superseded = _make_node(
+            "n-superseded",
+            "An old pricing claim that was replaced",
+            salience=0.99,
+        )
+        superseded.status = MemoryStatus.SUPERSEDED
+        mock_qdrant.search = AsyncMock(
+            return_value=[
+                MagicMock(
+                    payload={
+                        "node_id": "n001",
+                        "agent_id": "test-agent",
+                        "type": "semantic",
+                        "status": "active",
+                    },
+                    score=0.95,
+                )
+            ]
+        )
+        mock_neo4j.find_nodes_by_content_similarity = AsyncMock(
+            return_value=[mock_nodes[0]]
+        )
+        mock_neo4j.traverse = AsyncMock(return_value=[superseded])
+
+        planner = QueryPlanner(
+            neo4j_client=mock_neo4j,
+            qdrant_client=mock_qdrant,
+            embedder=mock_embedder,
+            settings=settings,
+        )
+        response = await planner.query(
+            QueryRequest(
+                query="AWS pricing",
+                agent_id="test-agent",
+                include_graph_hops=1,
+                top_k=10,
+            )
+        )
+
+        assert superseded.id not in {m.id for m in response.memories}
+        assert response.admission_report.rejected_by_reason["inactive_status"] == 1
+        assert superseded.id in response.admission_report.rejected_memory_ids["inactive_status"]
+        assert response.admission_report.policy_leak_count == 0
 
 
 # ─── Ranking and Deduplication ────────────────────────────────────────────────
