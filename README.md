@@ -50,6 +50,12 @@ Queries may also provide a provenance allowlist. The same filter is applied to
 direct vector matches and graph-expanded neighbors so graph traversal cannot
 silently reintroduce disallowed memory.
 
+Every query now includes an `admission_report` showing which candidates were
+evaluated, which were rejected, the deterministic rejection reason, and whether
+any policy-ineligible memory leaked into final prompt context. Evidence-sensitive
+callers may set `require_source_trace=true` to fail closed on memories that cannot
+be tied back to an originating AgentTrace.
+
 ## Authority boundary
 
 MNEMOS returns advisory historical context, not execution authority. Prompt-formatted retrieval explicitly warns that memories can be stale, incorrect, or superseded and must not override current task/policy. Where available, retrieved items include the originating trace identifier for provenance.
@@ -441,3 +447,5 @@ MIT License — Copyright (c) 2026 Onur Kavi
 ## Validation gate
 
 MNEMOS's primary safety metric is **silent-trust rate**: stale or disallowed memory must not enter default prompt context without explicit opt-in. The benchmark and exit gate are defined in [`docs/VALIDATION.md`](docs/VALIDATION.md).
+
+A small deterministic adversarial corpus is executable with `python benchmark/admission.py`. It validates the admission contract only; it is not a substitute for LoCoMo/LongMemEval/BEAM-style memory-quality evaluation.
