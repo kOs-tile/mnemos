@@ -440,7 +440,10 @@ class Neo4jClient:
             "WHERE r.weight IS NOT NULL AND r.weight > 0 "
             "RETURN s.id AS source_id, t.id AS target_id, "
             "  type(r) AS rel_type, r.weight AS weight, "
-            "  r.last_reinforced AS last_reinforced, r.id AS edge_id "
+            "  r.last_reinforced AS last_reinforced, r.last_decay AS last_decay, "
+            "  coalesce(t.access_count, 0) AS target_access_count, "
+            "  coalesce(t.salience, r.weight) AS target_salience, "
+            "  t.stability AS target_stability, r.id AS edge_id "
             "SKIP $offset LIMIT $batch_size"
         )
         rows: list[dict[str, Any]] = []
@@ -464,7 +467,7 @@ class Neo4jClient:
             "UNWIND $updates AS u "
             "MATCH (s {id: u.source_id})-[r]->(t {id: u.target_id}) "
             "WHERE type(r) = u.rel_type "
-            "SET r.weight = u.new_weight "
+            "SET r.weight = u.new_weight, r.last_decay = datetime() "
             "RETURN count(r) AS updated"
         )
         async with self._session() as session:
