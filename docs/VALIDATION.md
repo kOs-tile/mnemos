@@ -48,3 +48,38 @@ acceptable recall on the labeled corpus.
 
 Memory remains advisory. No memory value, including a remembered instruction,
 can grant runtime authority; KCC remains the authority plane.
+
+
+## Admission audit
+
+Every query now returns a machine-readable `admission_report` with:
+
+- evaluated candidate count
+- policy-eligible candidate count
+- returned memory count
+- rejection counts grouped by deterministic reason
+- rejected memory IDs grouped by reason
+- `policy_leak_count`
+
+The admission reasons currently include:
+
+- `inactive_status`
+- `stale_evidence`
+- `provenance_not_allowed`
+- `missing_source_trace`
+
+The same policy function is applied to direct vector matches and graph-expanded
+neighbors. This creates an inspectable invariant: any memory entering final prompt
+context must produce no rejection reason under the active query policy.
+
+For evidence-sensitive tasks, `require_source_trace=true` rejects memories that
+cannot be tied back to an originating AgentTrace.
+
+Run the synthetic contract benchmark with:
+
+```bash
+python benchmark/admission.py
+```
+
+This benchmark is a policy-boundary test, not a claim about factual-memory accuracy
+on LoCoMo, LongMemEval, BEAM, or production workloads.
