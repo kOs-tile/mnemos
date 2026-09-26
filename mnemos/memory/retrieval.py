@@ -133,7 +133,14 @@ class QueryPlanner:
             # Assign graph-expanded nodes a lower initial vector score
             existing_ids = {sn.node.id for sn in scored_nodes}
             for n in neighbor_nodes:
-                if n.id not in existing_ids and n.salience >= request.min_salience:
+                type_allowed = (
+                    request.memory_types is None or n.type in request.memory_types
+                )
+                if (
+                    n.id not in existing_ids
+                    and n.salience >= request.min_salience
+                    and type_allowed
+                ):
                     scored_nodes.append(
                         ScoredNode(node=n, vector_score=0.3, graph_distance=1)
                     )
@@ -180,22 +187,8 @@ class QueryPlanner:
             FieldCondition(key="status", match=MatchValue(value="active")),
         ]
 
-        if memory_types:
-            # Qdrant doesn't support OR natively on string fields easily,
-            # so we do separate searches and merge if multiple types requested
-            pass  # handled below
-
-        qdrant_filter = Filter(must=must_conditions)
-
-        if memory_types and len(memory_types) == 1:
-            qdrant_filter.must.append(
-                FieldCondition(
-                    key="type",
-                    match=MatchValue(value=memory_types[0].value),
-                )
-            )
-
-        try:
+        async def search_one(extra_conditions: list[FieldCondition]) -> list[dict[str, Any]]:
+            qdrant_filter = Filter(must=[*must_conditions, *extra_conditions])
             results = await self._qdrant.search(
                 collection_name=self._settings.qdrant_collection,
                 query_vector=vector,
@@ -208,6 +201,40 @@ class QueryPlanner:
                 for r in results
                 if r.payload and "node_id" in r.payload
             ]
+
+        try:
+            if memory_types and len(memory_types) > 1:
+                # Search each requested type independently, then merge by node id.
+                # This preserves OR semantics without accidentally returning other types.
+                merged: dict[str, float] = {}
+                for memory_type in memory_types:
+                    rows = await search_one([
+                        FieldCondition(
+                            key="type",
+                            match=MatchValue(value=memory_type.value),
+                        )
+                    ])
+                    for row in rows:
+                        merged[row["node_id"]] = max(
+                            row["score"],
+                            merged.get(row["node_id"], float("-inf")),
+                        )
+                return [
+                    {"node_id": node_id, "score": score}
+                    for node_id, score in sorted(
+                        merged.items(), key=lambda item: item[1], reverse=True
+                    )[:top_k]
+                ]
+
+            extra_conditions: list[FieldCondition] = []
+            if memory_types:
+                extra_conditions.append(
+                    FieldCondition(
+                        key="type",
+                        match=MatchValue(value=memory_types[0].value),
+                    )
+                )
+            return await search_one(extra_conditions)
         except Exception as e:
             logger.warning(f"Qdrant search failed: {e}. Returning empty results.")
             return []
