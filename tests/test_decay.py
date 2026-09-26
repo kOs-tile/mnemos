@@ -210,6 +210,46 @@ class TestDecayEngine:
         return DecayEngine(neo4j_client=mock_neo4j, settings=settings)
 
     @pytest.mark.asyncio
+    def test_default_scale_does_not_archive_fresh_strong_memory(self, mock_neo4j):
+        """A normal six-hour sweep should not erase a strong fresh memory."""
+        from mnemos.config import Settings
+        settings = Settings(
+            decay_threshold=0.05,
+            decay_stability_base=24.0,
+            decay_interval_hours=6.0,
+        )
+        engine = DecayEngine(neo4j_client=mock_neo4j, settings=settings)
+        now = datetime.now(tz=timezone.utc)
+        row = {
+            "weight": 1.0,
+            "last_reinforced": (now - timedelta(hours=6)).isoformat(),
+            "last_decay": None,
+            "target_access_count": 0,
+            "target_salience": 1.0,
+            "target_stability": None,
+        }
+        assert engine._compute_decayed_weight(row, now) > settings.decay_threshold
+
+    def test_incremental_decay_matches_single_elapsed_interval(self, mock_neo4j):
+        """A second sweep applies only time since the prior decay checkpoint."""
+        from mnemos.config import Settings
+        settings = Settings(decay_stability_base=24.0)
+        engine = DecayEngine(neo4j_client=mock_neo4j, settings=settings)
+        t0 = datetime.now(tz=timezone.utc) - timedelta(hours=12)
+        t6 = t0 + timedelta(hours=6)
+        t12 = t0 + timedelta(hours=12)
+        stability = 24.0
+        weight_at_6h = new_weight_after_decay(1.0, t0, stability, now=t6)
+        row = {
+            "weight": weight_at_6h,
+            "last_reinforced": t0.isoformat(),
+            "last_decay": t6.isoformat(),
+            "target_stability": stability,
+        }
+        incremental = engine._compute_decayed_weight(row, t12)
+        absolute = new_weight_after_decay(1.0, t0, stability, now=t12)
+        assert abs(incremental - absolute) < 1e-9
+
     async def test_empty_graph_sweep_returns_zero_counts(
         self, decay_engine, mock_neo4j
     ):
