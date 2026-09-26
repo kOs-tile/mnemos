@@ -53,6 +53,8 @@ class NodeProp:
     STABILITY = "stability"
     STATUS = "status"
     SOURCE_TRACE_ID = "source_trace_id"
+    PROVENANCE = "provenance"
+    VALID_UNTIL = "valid_until"
     CREATED_AT = "created_at"
     LAST_ACCESSED = "last_accessed"
     METADATA = "metadata"
@@ -91,6 +93,12 @@ SCHEMA_QUERIES: list[str] = [
 
     "CREATE INDEX memory_salience IF NOT EXISTS "
     "FOR (m:Memory) ON (m.salience)",
+
+    "CREATE INDEX memory_provenance IF NOT EXISTS "
+    "FOR (m:Memory) ON (m.provenance)",
+
+    "CREATE INDEX memory_valid_until IF NOT EXISTS "
+    "FOR (m:Memory) ON (m.valid_until)",
 
     "CREATE INDEX memory_created_at IF NOT EXISTS "
     "FOR (m:Memory) ON (m.created_at)",
