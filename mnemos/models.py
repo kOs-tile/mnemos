@@ -6,6 +6,8 @@ All domain objects used across the service, API, and SDK.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -20,6 +22,11 @@ def _utcnow() -> datetime:
 
 def _new_id() -> str:
     return str(uuid.uuid4())
+
+
+def _canonical_digest(value: Any) -> str:
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 # ─── Enumerations ─────────────────────────────────────────────────────────────
@@ -313,6 +320,13 @@ class RetrievalAdmissionReport(BaseModel):
     rejected_by_reason: dict[str, int] = Field(default_factory=dict)
     rejected_memory_ids: dict[str, list[str]] = Field(default_factory=dict)
     policy_leak_count: int = 0
+    admission_fingerprint: str = ""
+
+    @model_validator(mode="after")
+    def seal_admission_report(self) -> "RetrievalAdmissionReport":
+        payload = self.model_dump(exclude={"admission_fingerprint"})
+        self.admission_fingerprint = _canonical_digest(payload)
+        return self
 
 
 
