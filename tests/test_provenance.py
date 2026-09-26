@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
-from mnemos.memory.retrieval import _memory_allowed
+from mnemos.memory.retrieval import _memory_allowed, _memory_rejection_reason
 from mnemos.models import (
     MemoryNode,
     MemoryProvenance,
+    MemoryStatus,
     MemoryType,
     QueryRequest,
     QueryResponse,
@@ -14,6 +15,8 @@ def make_node(
     *,
     provenance: MemoryProvenance = MemoryProvenance.UNKNOWN,
     valid_until=None,
+    status: MemoryStatus = MemoryStatus.ACTIVE,
+    source_trace_id: str | None = "trace-1",
 ) -> MemoryNode:
     return MemoryNode(
         id="00000000-0000-0000-0000-000000000001",
@@ -22,7 +25,8 @@ def make_node(
         agent_id="agent-1",
         provenance=provenance,
         valid_until=valid_until,
-        source_trace_id="trace-1",
+        status=status,
+        source_trace_id=source_trace_id,
     )
 
 
@@ -98,3 +102,49 @@ def test_prompt_exposes_provenance_and_staleness():
     assert "stale=false" in prompt
     assert "source_trace=trace-1" in prompt
     assert "not authorization" in prompt.lower()
+
+
+
+def test_superseded_memory_fails_closed_defensively():
+    node = make_node(status=MemoryStatus.SUPERSEDED)
+    request = QueryRequest(query="claim", agent_id="agent-1")
+
+    assert _memory_allowed(node, request) is False
+    assert _memory_rejection_reason(node, request) == "inactive_status"
+
+
+def test_archived_memory_fails_closed_defensively():
+    node = make_node(status=MemoryStatus.ARCHIVED)
+    request = QueryRequest(query="claim", agent_id="agent-1")
+
+    assert _memory_allowed(node, request) is False
+    assert _memory_rejection_reason(node, request) == "inactive_status"
+
+
+def test_traceable_mode_rejects_memory_without_source_trace():
+    node = make_node(
+        provenance=MemoryProvenance.LLM_DERIVED,
+        source_trace_id=None,
+    )
+    request = QueryRequest(
+        query="claim",
+        agent_id="agent-1",
+        require_source_trace=True,
+    )
+
+    assert _memory_allowed(node, request) is False
+    assert _memory_rejection_reason(node, request) == "missing_source_trace"
+
+
+def test_traceable_mode_accepts_memory_with_source_trace():
+    node = make_node(
+        provenance=MemoryProvenance.LLM_DERIVED,
+        source_trace_id="trace-grounded",
+    )
+    request = QueryRequest(
+        query="claim",
+        agent_id="agent-1",
+        require_source_trace=True,
+    )
+
+    assert _memory_allowed(node, request) is True
