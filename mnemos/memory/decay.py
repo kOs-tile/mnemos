@@ -250,31 +250,36 @@ class DecayEngine:
     ) -> float:
         """Apply Ebbinghaus decay to a single edge row from Neo4j."""
         current_weight = float(edge_row.get("weight", 1.0))
-        last_reinforced_raw = edge_row.get("last_reinforced")
+        # Decay must be incremental. Re-applying total time since reinforcement
+        # to an already-decayed weight compounds the same elapsed interval on
+        # every sweep. Prefer the previous decay checkpoint when available.
+        reference_raw = edge_row.get("last_decay") or edge_row.get("last_reinforced")
 
-        if last_reinforced_raw is None:
+        if reference_raw is None:
             return current_weight  # No timestamp — skip decay
 
-        # Parse timestamp
-        if isinstance(last_reinforced_raw, str):
-            last_reinforced = datetime.fromisoformat(last_reinforced_raw)
-            if last_reinforced.tzinfo is None:
-                last_reinforced = last_reinforced.replace(tzinfo=timezone.utc)
-        elif hasattr(last_reinforced_raw, "to_native"):
-            last_reinforced = last_reinforced_raw.to_native().replace(tzinfo=timezone.utc)
+        if isinstance(reference_raw, str):
+            reference_time = datetime.fromisoformat(reference_raw)
+            if reference_time.tzinfo is None:
+                reference_time = reference_time.replace(tzinfo=timezone.utc)
+        elif hasattr(reference_raw, "to_native"):
+            reference_time = reference_raw.to_native().replace(tzinfo=timezone.utc)
         else:
-            last_reinforced = last_reinforced_raw
+            reference_time = reference_raw
 
-        # Use a default stability (nodes carry their own, but edges use base)
-        stability = compute_stability(
-            base_stability=self._settings.decay_stability_base,
-            access_count=0,  # Edge-level stability uses base; nodes have their own
-            initial_salience=current_weight,
-        )
+        stored_stability = edge_row.get("target_stability")
+        if stored_stability is not None and float(stored_stability) > 0:
+            stability = float(stored_stability)
+        else:
+            stability = compute_stability(
+                base_stability=self._settings.decay_stability_base,
+                access_count=int(edge_row.get("target_access_count") or 0),
+                initial_salience=float(edge_row.get("target_salience") or current_weight),
+            )
 
         return new_weight_after_decay(
             current_weight=current_weight,
-            last_reinforced=last_reinforced,
+            last_reinforced=reference_time,
             stability=stability,
             now=now,
         )
