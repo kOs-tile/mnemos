@@ -54,6 +54,16 @@ class MemoryStatus(str, Enum):
     SUPERSEDED = "superseded"   # Replaced by contradiction resolution
 
 
+class MemoryProvenance(str, Enum):
+    """How the memory content entered the system; not a truth verdict."""
+
+    AGENT_TRACE = "agent_trace"
+    LLM_DERIVED = "llm_derived"
+    EXTERNAL_EVIDENCE = "external_evidence"
+    USER_ASSERTED = "user_asserted"
+    UNKNOWN = "unknown"
+
+
 # ─── Core Domain Models ───────────────────────────────────────────────────────
 
 
@@ -78,7 +88,9 @@ class MemoryNode(BaseModel):
         default=1.0,
         ge=0.0,
         le=1.0,
-        description="LLM confidence in this fact (semantic nodes)",
+        description=(
+            "Extraction/source confidence only. This is not independent truth verification."
+        ),
     )
     access_count: int = Field(default=0, description="How many times this node has been retrieved")
     stability: float = Field(
@@ -88,9 +100,26 @@ class MemoryNode(BaseModel):
     )
     status: MemoryStatus = Field(default=MemoryStatus.ACTIVE)
     source_trace_id: str | None = Field(default=None, description="AgentTrace that created this")
+    provenance: MemoryProvenance = Field(
+        default=MemoryProvenance.UNKNOWN,
+        description="Origin class for this memory; does not imply truth or authority.",
+    )
+    valid_until: datetime | None = Field(
+        default=None,
+        description="Optional evidence freshness boundary. Expired memories are stale for retrieval.",
+    )
     created_at: datetime = Field(default_factory=_utcnow)
     last_accessed: datetime = Field(default_factory=_utcnow)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    def is_evidence_stale(self, now: datetime | None = None) -> bool:
+        if self.valid_until is None:
+            return False
+        now = now or _utcnow()
+        valid_until = self.valid_until
+        if valid_until.tzinfo is None:
+            valid_until = valid_until.replace(tzinfo=timezone.utc)
+        return now >= valid_until
 
     model_config = {"use_enum_values": True}
 
@@ -258,6 +287,14 @@ class QueryRequest(BaseModel):
         description="Filter to specific memory types. None = all types.",
     )
     min_salience: float = Field(default=0.0, ge=0.0, le=1.0)
+    include_stale_evidence: bool = Field(
+        default=False,
+        description="Include memories whose valid_until boundary has expired.",
+    )
+    allowed_provenance: list[MemoryProvenance] | None = Field(
+        default=None,
+        description="Optional provenance allowlist applied after retrieval.",
+    )
 
 
 class QueryResponse(BaseModel):
@@ -294,6 +331,8 @@ class QueryResponse(BaseModel):
                 sections.append(
                     f"- [{node.salience:.2f}] {node.content}  "
                     f"(accessed {node.access_count}x, confidence={node.confidence:.2f}, "
+                    f"provenance={node.provenance}, "
+                    f"stale={str(node.is_evidence_stale()).lower()}, "
                     f"source_trace={node.source_trace_id or 'unknown'})"
                 )
         return "\n".join(sections)
