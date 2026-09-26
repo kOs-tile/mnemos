@@ -33,6 +33,7 @@ from mnemos.models import (
     IngestResponse,
     MemoryEdge,
     MemoryNode,
+    MemoryProvenance,
     MemoryType,
     RelationType,
 )
@@ -166,6 +167,7 @@ class IngestionPipeline:
             session_id=trace.session_id,
             salience=0.7,
             source_trace_id=trace.trace_id,
+            provenance=MemoryProvenance.AGENT_TRACE,
         )
         await self._neo4j.create_node(trace_node)
         nodes_created += 1
@@ -184,6 +186,7 @@ class IngestionPipeline:
                 salience=entity.confidence,
                 confidence=entity.confidence,
                 source_trace_id=trace.trace_id,
+                provenance=MemoryProvenance.LLM_DERIVED,
                 metadata={
                     "entity_name": entity.name,
                     "entity_type": entity.type,
@@ -215,6 +218,7 @@ class IngestionPipeline:
                 session_id=trace.session_id,
                 salience=0.8,
                 source_trace_id=trace.trace_id,
+                provenance=MemoryProvenance.LLM_DERIVED,
             )
             await self._neo4j.create_node(proc_node)
             nodes_created += 1
@@ -298,6 +302,10 @@ class IngestionPipeline:
                     "content": n.content[:500],
                     "salience": n.salience,
                     "status": n.status,
+                    "provenance": n.provenance,
+                    "valid_until": (
+                        n.valid_until.isoformat() if n.valid_until else None
+                    ),
                 },
             )
             for n, vec in zip(nodes, vectors)
