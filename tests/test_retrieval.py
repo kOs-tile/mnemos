@@ -220,6 +220,55 @@ class TestQueryPlannerQdrant:
         assert result.memories == []
 
     @pytest.mark.asyncio
+    async def test_multiple_memory_types_use_or_semantics(
+        self, mock_neo4j, mock_embedder, settings, mock_nodes
+    ):
+        """Multiple requested types must not degrade into an unfiltered search."""
+        qdrant = AsyncMock()
+
+        def result(node_id: str, score: float, type_value: str):
+            row = MagicMock()
+            row.payload = {
+                "node_id": node_id,
+                "agent_id": "test-agent",
+                "type": type_value,
+                "status": "active",
+            }
+            row.score = score
+            return row
+
+        qdrant.search = AsyncMock(
+            side_effect=[
+                [result("n003", 0.91, "procedural")],
+                [result("n004", 0.87, "episodic")],
+            ]
+        )
+        mock_neo4j.find_nodes_by_content_similarity = AsyncMock(
+            return_value=[mock_nodes[2], mock_nodes[3]]
+        )
+        mock_neo4j.traverse = AsyncMock(return_value=[])
+
+        planner = QueryPlanner(
+            neo4j_client=mock_neo4j,
+            qdrant_client=qdrant,
+            embedder=mock_embedder,
+            settings=settings,
+        )
+        request = QueryRequest(
+            query="workflow history",
+            agent_id="test-agent",
+            memory_types=[MemoryType.PROCEDURAL, MemoryType.EPISODIC],
+            include_graph_hops=0,
+        )
+        response = await planner.query(request)
+
+        assert qdrant.search.await_count == 2
+        assert {m.type for m in response.memories} == {
+            MemoryType.PROCEDURAL,
+            MemoryType.EPISODIC,
+        }
+
+    @pytest.mark.asyncio
     async def test_memory_type_filter_applied(self, query_planner, mock_qdrant):
         """When memory_types filter is set to a single type, Qdrant filter should include it."""
         request = QueryRequest(
@@ -237,6 +286,48 @@ class TestQueryPlannerQdrant:
 # ─── Graph Traversal ─────────────────────────────────────────────────────────
 
 class TestQueryPlannerGraphTraversal:
+
+    @pytest.mark.asyncio
+    async def test_graph_expansion_respects_memory_type_filter(
+        self, mock_neo4j, mock_qdrant, mock_embedder, settings, mock_nodes
+    ):
+        mock_qdrant.search = AsyncMock(
+            return_value=[
+                MagicMock(
+                    payload={
+                        "node_id": "n003",
+                        "agent_id": "test-agent",
+                        "type": "procedural",
+                        "status": "active",
+                    },
+                    score=0.95,
+                )
+            ]
+        )
+        mock_neo4j.find_nodes_by_content_similarity = AsyncMock(
+            return_value=[mock_nodes[2]]
+        )
+        mock_neo4j.traverse = AsyncMock(
+            return_value=[mock_nodes[0], mock_nodes[3]]
+        )
+
+        planner = QueryPlanner(
+            neo4j_client=mock_neo4j,
+            qdrant_client=mock_qdrant,
+            embedder=mock_embedder,
+            settings=settings,
+        )
+        response = await planner.query(
+            QueryRequest(
+                query="retry procedure",
+                agent_id="test-agent",
+                memory_types=[MemoryType.PROCEDURAL],
+                include_graph_hops=1,
+                top_k=10,
+            )
+        )
+
+        assert [m.type for m in response.memories] == [MemoryType.PROCEDURAL]
 
     @pytest.mark.asyncio
     async def test_graph_hops_zero_skips_traverse(self, query_planner, mock_neo4j):
