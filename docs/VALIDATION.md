@@ -12,7 +12,7 @@ without an explicit opt-in.
 
 Target: **0**.
 
-## Benchmark corpus v0.1
+## Admission benchmark corpus v1
 
 - fresh episodic trace memories
 - LLM-derived semantic memories
@@ -75,11 +75,29 @@ context must produce no rejection reason under the active query policy.
 For evidence-sensitive tasks, `require_source_trace=true` rejects memories that
 cannot be tied back to an originating AgentTrace.
 
-Run the synthetic contract benchmark with:
+The original six-case smoke benchmark remains available:
 
 ```bash
 python benchmark/admission.py
 ```
+
+The expanded executable matrix is:
+
+```bash
+python -m benchmark.admission_matrix
+```
+
+Current CI checkpoint:
+
+- direct admission-policy cases: **20/20 expected outcomes**
+- graph-expansion trust-boundary cases: **4/4 expected outcomes**
+- total contract checks: **24/24**
+- observed policy leaks: **0**
+- direct rejection distribution: 6 provenance, 3 stale, 2 missing-source-trace, 3 inactive-status
+- stale-evidence explicit opt-in is exercised
+- rejection precedence is regression-locked
+- stale/disallowed/missing-trace graph neighbors are rejected before final prompt context
+- a policy-eligible graph neighbor remains admissible
 
 This benchmark is a policy-boundary test, not a claim about factual-memory accuracy
 on LoCoMo, LongMemEval, BEAM, or production workloads.
