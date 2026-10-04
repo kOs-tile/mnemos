@@ -449,3 +449,5 @@ MIT License — Copyright (c) 2026 Onur Kavi
 MNEMOS's primary safety metric is **silent-trust rate**: stale or disallowed memory must not enter default prompt context without explicit opt-in. The benchmark and exit gate are defined in [`docs/VALIDATION.md`](docs/VALIDATION.md).
 
 A small deterministic adversarial corpus is executable with `python benchmark/admission.py`. It validates the admission contract only; it is not a substitute for LoCoMo/LongMemEval/BEAM-style memory-quality evaluation.
+
+Current regression checkpoint: **6/6 admission-policy cases match expected outcomes with 0 silent-trust leaks**. This is contract evidence for the current synthetic corpus, not a production memory-quality score.
